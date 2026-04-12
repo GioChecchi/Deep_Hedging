@@ -1,0 +1,4 @@
+# Note:
+- shared parameters (single NN that handle all rebalancing dates) perform better
+  than every analytical model and BatchNorm is taken out since hurt performance
+- Indeed since batch norm was hurting i made a switch
