@@ -1,2 +1,54 @@
 # Note:
-- BatchNorm make BS no cost explode
+- BatchNorm make BS no cost explode: 
+    "BatchNorm is disabled throughout (use_batch_norm=False) despite the paper
+     recommending it. In our on-policy training setup, fresh paths are generated
+     every epoch, causing BatchNorm's running statistics to chase a non-stationary
+     distribution. This destabilizes training catastrophically. 
+     The paper's implementation likely used a fixed pre-generated dataset where 
+     BatchNorm is well-defined."
+- deep OTM and ITM the delta of DH goes outside the interval [0,1], 
+  sigmoid can be used but paper doesnt use it
+
+- better results with higher batch size for BS
+
+- euler for heston:
+def generate_heston_paths_euler(S0, v0, r, kappa, theta, sigma_v, rho, T, steps, n_paths):
+    """Fast Euler scheme for training — biased but 10x faster than exact CIR."""
+    dt          = T / steps
+    sqrt_dt     = np.sqrt(dt)
+    sqrt_1_rho2 = np.sqrt(1.0 - rho**2)
+
+    S  = np.full(n_paths, S0)
+    v  = np.full(n_paths, v0)
+    S2 = np.full(n_paths, _L(T, v, kappa, theta))
+    running_integral = np.zeros(n_paths)
+
+    S_out  = np.zeros((steps + 1, n_paths)); S_out[0]  = S
+    v_out  = np.zeros((steps + 1, n_paths)); v_out[0]  = v
+    S2_out = np.zeros((steps + 1, n_paths)); S2_out[0] = S2
+
+    for step in range(steps):
+        Z1 = np.random.randn(n_paths)
+        Z2 = np.random.randn(n_paths)
+        v_pos = np.maximum(v, 0.0)
+
+        v_new = np.maximum(
+            v + kappa * (theta - v_pos) * dt + sigma_v * np.sqrt(v_pos) * sqrt_dt * Z2, 0.0)
+        I = 0.5 * (v_pos + v_new) * dt
+
+        dB = rho * Z2 + sqrt_1_rho2 * Z1
+        S  = S * np.exp(r * dt - 0.5 * I + np.sqrt(np.maximum(I, 0.0)) * dB)
+        v  = v_new
+
+        running_integral += I
+        S2 = running_integral + _L(T - (step+1)*dt, v, kappa, theta)
+
+        S_out[step+1]  = S
+        v_out[step+1]  = v
+        S2_out[step+1] = S2
+
+    return (torch.tensor(S_out,  dtype=torch.float32, device=device),
+            torch.tensor(v_out,  dtype=torch.float32, device=device),
+            torch.tensor(S2_out, dtype=torch.float32, device=device))
+    
+    in train_model: paths, vols, paths2 = generate_heston_paths_euler(...)
