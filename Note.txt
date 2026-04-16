@@ -52,3 +52,13 @@ def generate_heston_paths_euler(S0, v0, r, kappa, theta, sigma_v, rho, T, steps,
             torch.tensor(S2_out, dtype=torch.float32, device=device))
     
     in train_model: paths, vols, paths2 = generate_heston_paths_euler(...)
+
+
+- In Heston Cvar with cost: Alpha=0.5 — anomalous result, needs flagging: DH turnover collapses to 0.350.35
+        0.35 vs model's 2.262.26
+        2.26. The network has learned to barely hedge at all, keeping most of the premium (mean PnL −0.22-0.22
+        −0.22 vs −1.17-1.17
+        −1.17) but leaving massive residual risk — CVaR(95%) explodes to 4.714.71
+        4.71 vs 2.972.97
+        2.97. This is a known failure mode of mild risk objectives in complex settings: with α=0.5\alpha=0.5
+        α=0.5 the penalty on tail losses is too weak, so the network finds the degenerate solution of under-trading to save costs ⚠️
